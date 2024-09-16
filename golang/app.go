@@ -90,6 +90,29 @@ func dbInitialize() {
 	for _, sql := range sqls {
 		db.Exec(sql)
 	}
+
+	var posts []Post
+	err := db.Select(&posts, "SELECT * FROM posts")
+	if err != nil {
+		log.Print(err)
+		return
+	}
+
+	for _, post := range posts {
+		ext := ""
+		if post.Mime == "image/jpeg" {
+			ext = "jpg"
+		} else if post.Mime == "image/png" {
+			ext = "png"
+		} else if post.Mime == "image/gif" {
+			ext = "gif"
+		}
+		err := saveImage(post.ID, ext, post.Imgdata)
+		if err != nil {
+			log.Print(err)
+			return
+		}
+	}
 }
 
 func tryLogin(accountName, password string) *User {
@@ -675,15 +698,19 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mime := ""
+	ext := ""
 	if file != nil {
 		// 投稿のContent-Typeからファイルのタイプを決定する
 		contentType := header.Header["Content-Type"][0]
 		if strings.Contains(contentType, "jpeg") {
 			mime = "image/jpeg"
+			ext = "jpg"
 		} else if strings.Contains(contentType, "png") {
 			mime = "image/png"
+			ext = "png"
 		} else if strings.Contains(contentType, "gif") {
 			mime = "image/gif"
+			ext = "gif"
 		} else {
 			session := getSession(r)
 			session.Values["notice"] = "投稿できる画像形式はjpgとpngとgifだけです"
@@ -714,7 +741,7 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 		query,
 		me.ID,
 		mime,
-		filedata,
+		"",
 		r.FormValue("body"),
 	)
 	if err != nil {
@@ -727,8 +754,26 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 		log.Print(err)
 		return
 	}
+	err = saveImage(int(pid), ext, filedata)
+	if err != nil {
+		log.Print(err)
+		return
+	}
 
 	http.Redirect(w, r, "/posts/"+strconv.FormatInt(pid, 10), http.StatusFound)
+}
+
+func saveImage(postID int, ext string, body []byte) error {
+	f, err := os.Create("images/" + strconv.Itoa(postID) + "." + ext)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(body)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func getImage(w http.ResponseWriter, r *http.Request) {
@@ -740,13 +785,25 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	post := Post{}
-	err = db.Get(&post, "SELECT * FROM `posts` WHERE `id` = ?", pid)
+	err = db.Get(&post, "SELECT id, user_id, body, mime, created_at FROM `posts` WHERE `id` = ?", pid)
 	if err != nil {
 		log.Print(err)
 		return
 	}
 
 	ext := r.PathValue("ext")
+
+	f, err := os.Open("images/" + pidStr + "." + ext)
+	defer f.Close()
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	post.Imgdata, err = io.ReadAll(f)
+	if err != nil {
+		log.Print(err)
+		return
+	}
 
 	if ext == "jpg" && post.Mime == "image/jpeg" ||
 		ext == "png" && post.Mime == "image/png" ||
