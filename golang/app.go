@@ -322,13 +322,36 @@ func getTemplPath(filename string) string {
 }
 
 func getInitialize(w http.ResponseWriter, r *http.Request) {
+	err := exec.Command("rm", "-rf", "images").Run()
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	err = exec.Command("cp", "-r", "initial-images", "images").Run()
+	if err != nil {
+		log.Print(err)
+		return
+	}
 	dbInitialize()
 	w.WriteHeader(http.StatusOK)
 }
 
 func getPreInitialize(w http.ResponseWriter, r *http.Request) {
+	err := exec.Command("rm", "-rf", "initial-images").Run()
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	err = exec.Command("git", "restore", ".").Run()
+	if err != nil {
+		log.Print(err)
+		return
+	}
+
+	dbInitialize()
+
 	var posts []Post
-	err := db.Select(&posts, "SELECT * FROM posts")
+	err = db.Select(&posts, "SELECT * FROM posts")
 	if err != nil {
 		log.Print(err)
 		return
@@ -342,7 +365,7 @@ func getPreInitialize(w http.ResponseWriter, r *http.Request) {
 		} else if post.Mime == "image/gif" {
 			ext = "gif"
 		}
-		err := saveImage(post.ID, ext, post.Imgdata)
+		err := saveInitialImage(post.ID, ext, post.Imgdata)
 		if err != nil {
 			log.Print(err)
 			return
@@ -768,6 +791,19 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 
 func saveImage(postID int, ext string, body []byte) error {
 	f, err := os.Create("images/" + strconv.Itoa(postID) + "." + ext)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(body)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func saveInitialImage(postID int, ext string, body []byte) error {
+	f, err := os.Create("initial-images/" + strconv.Itoa(postID) + "." + ext)
 	if err != nil {
 		return err
 	}
