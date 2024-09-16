@@ -202,20 +202,65 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 	for _, p := range results {
 		p.CommentCount = commentCountMap[p.ID]
 
-		query := "SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC"
+		query := `
+SELECT
+    comments.id AS comment_id,
+    comments.post_id,
+    comments.comment,
+    comments.created_at AS comment_created_at,
+    users.id AS user_id,
+    users.account_name,
+    users.passhash,
+    users.authority,
+    users.del_flg,
+    users.created_at AS user_created_at
+FROM
+	comments 
+	INNER JOIN users
+	    ON comments.user_id = users.id 
+WHERE
+    post_id = ? 
+ORDER BY
+    comment_created_at DESC
+`
 		if !allComments {
 			query += " LIMIT 3"
 		}
-		var comments []Comment
-		err = db.Select(&comments, query, p.ID)
+
+		var commentsWithUsers []struct {
+			CommentID        int       `db:"comment_id"`
+			PostID           int       `db:"post_id"`
+			Comment          string    `db:"comment"`
+			CommentCreatedAt time.Time `db:"comment_created_at"`
+			UserID           int       `db:"user_id"`
+			AccountName      string    `db:"account_name"`
+			Passhash         string    `db:"passhash"`
+			Authority        int       `db:"authority"`
+			DelFlg           int       `db:"del_flg"`
+			UserCreatedAt    time.Time `db:"user_created_at"`
+		}
+		err = db.Select(&commentsWithUsers, query, p.ID)
 		if err != nil {
 			return nil, err
 		}
 
-		for i := 0; i < len(comments); i++ {
-			err := db.Get(&comments[i].User, "SELECT * FROM `users` WHERE `id` = ?", comments[i].UserID)
-			if err != nil {
-				return nil, err
+		comments := make([]Comment, len(commentsWithUsers))
+		for i, c := range commentsWithUsers {
+			comments[i] = Comment{
+				ID:        c.CommentID,
+				PostID:    c.PostID,
+				UserID:    c.UserID,
+				Comment:   c.Comment,
+				CreatedAt: c.CommentCreatedAt,
+			}
+
+			comments[i].User = User{
+				ID:          c.UserID,
+				AccountName: c.AccountName,
+				Passhash:    c.Passhash,
+				Authority:   c.Authority,
+				DelFlg:      c.DelFlg,
+				CreatedAt:   c.UserCreatedAt,
 			}
 		}
 
