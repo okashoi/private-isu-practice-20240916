@@ -90,29 +90,6 @@ func dbInitialize() {
 	for _, sql := range sqls {
 		db.Exec(sql)
 	}
-
-	var posts []Post
-	err := db.Select(&posts, "SELECT * FROM posts")
-	if err != nil {
-		log.Print(err)
-		return
-	}
-
-	for _, post := range posts {
-		ext := ""
-		if post.Mime == "image/jpeg" {
-			ext = "jpg"
-		} else if post.Mime == "image/png" {
-			ext = "png"
-		} else if post.Mime == "image/gif" {
-			ext = "gif"
-		}
-		err := saveImage(post.ID, ext, post.Imgdata)
-		if err != nil {
-			log.Print(err)
-			return
-		}
-	}
 }
 
 func tryLogin(accountName, password string) *User {
@@ -346,6 +323,32 @@ func getTemplPath(filename string) string {
 
 func getInitialize(w http.ResponseWriter, r *http.Request) {
 	dbInitialize()
+	w.WriteHeader(http.StatusOK)
+}
+
+func getPreInitialize(w http.ResponseWriter, r *http.Request) {
+	var posts []Post
+	err := db.Select(&posts, "SELECT * FROM posts")
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	for _, post := range posts {
+		ext := ""
+		if post.Mime == "image/jpeg" {
+			ext = "jpg"
+		} else if post.Mime == "image/png" {
+			ext = "png"
+		} else if post.Mime == "image/gif" {
+			ext = "gif"
+		}
+		err := saveImage(post.ID, ext, post.Imgdata)
+		if err != nil {
+			log.Print(err)
+			return
+		}
+	}
+
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -972,6 +975,7 @@ func main() {
 	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 		http.FileServer(http.Dir("../public")).ServeHTTP(w, r)
 	})
+	r.Get("/pre-initialize", getPreInitialize)
 
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
