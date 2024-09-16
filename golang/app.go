@@ -221,7 +221,7 @@ FROM
 WHERE
     post_id = ? 
 ORDER BY
-    comment_created_at DESC
+    comment_id DESC
 `
 		if !allComments {
 			query += " LIMIT 3"
